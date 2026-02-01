@@ -10,7 +10,7 @@ Kubernetesマルチマスタークラスターの高可用性(HA)設定とテス
 
 ## 物理構成
 ```text
-tx100s3-01 (Debian 11, 16GB)                tx100s3-02 (Debian 11, 16GB)
+host-a (Debian 11, 16GB)                host-b (Debian 11, 16GB)
 ├── KVMゲスト1: ha-master1 (3GB)        ├── KVMゲスト1: hb-master (3GB)
 ├── KVMゲスト2: ha-worker1 (4GB)        ├── KVMゲスト2: hb-worker1 (4GB)
 ├── KVMゲスト2: ha-worker2 (4GB)        ├── KVMゲスト2: hb-worker2 (4GB)
