@@ -1,0 +1,49 @@
+#!/bin/bash
+set -e
+
+echo "=== PostgreSQL Database Initialization ==="
+
+# Wait for PostgreSQL to start
+echo "Waiting for PostgreSQL to start..."
+for i in {1..30}; do
+    if pg_isready -U k3s 2>/dev/null | grep -q "accepting connections"; then
+        echo "PostgreSQL is ready"
+        break
+    fi
+    echo "Waiting... (/30)"
+    sleep 2
+done
+
+# Create replicator user
+echo "Creating replicator user..."
+psql -U k3s -c "CREATE USER replicator WITH REPLICATION PASSWORD '${PGREPLICAPASSWD}';" 2>/dev/null || true
+
+# Create k3s user and database
+echo "Creating k3s database and user..."
+psql -U k3s -c "CREATE USER k3s WITH PASSWORD '${PGPASSWD}';" 2>/dev/null || true
+# データベースが存在しない場合のみ作成
+psql -U k3s -c "CREATE DATABASE k3s OWNER k3s;" 2>/dev/null || true
+
+# Create extensions in k3s database
+echo "Creating extensions..."
+psql -U k3s -d k3s -c "
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS btree_gin;
+CREATE EXTENSION IF NOT EXISTS btree_gist;"
+
+echo "Creating physical replication slots..."
+psql -U k3s -c "
+SELECT pg_create_physical_replication_slot('standby_a_slot', true)
+WHERE NOT EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'standby_a_slot');
+
+SELECT pg_create_physical_replication_slot('standby_b_slot', true)
+WHERE NOT EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'standby_b_slot');"
+
+echo "Granting database permissions..."
+psql -U k3s -c "
+GRANT CONNECT ON DATABASE k3s TO replicator;
+GRANT USAGE ON SCHEMA public TO replicator;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO replicator;"
+
+echo "=== Database initialization completed ==="

@@ -1,0 +1,33 @@
+services:
+  # プライマリPostgreSQL
+  # versionはここから選択 https://hub.docker.com/_/postgres
+  postgres-primary:
+    image: postgres:${PGSQL_VERSION}
+    container_name: postgres-${HOSTNAME}
+    restart: always
+    environment:
+      PGDATA: /var/lib/postgresql/data
+      POSTGRES_DB: k3s
+      POSTGRES_USER: k3s
+      POSTGRES_PASSWORD: ${PGPASSWD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      TZ: Asia/Tokyo
+    network_mode: host
+    #ports:
+    #  - "5432:5432"
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+      - ./config/postgresql-primary.conf:/etc/postgresql/postgresql.conf
+      - ./config/pg_hba.conf:/etc/postgresql/pg_hba.conf
+      - ./scripts/init-db.sh:/scripts/init-db.sh:ro
+      - ./scripts/init-standby.sh:/scripts/init-standby.sh:ro
+    command: >
+      postgres
+      -c config_file=/etc/postgresql/postgresql.conf
+      -c hba_file=/etc/postgresql/pg_hba.conf
+      -c listen_addresses='*'
+      -c port=5432
+      -c wal_level=replica
+      -c max_wal_senders=10
+      -c max_replication_slots=10
+      -c hot_standby=on

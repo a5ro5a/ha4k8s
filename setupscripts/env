@@ -1,0 +1,36 @@
+# 01-create-alpine-template.sh
+TEMPLATE_NAME="alpine-template.qcow2"
+BRIDGE="your vlan-bride device"
+OS_DIR="your os images libralies"
+WORK_DIR="/var/lib/libvirt/images"
+DNS_SERVER="1.1.1.1,8.8.8.8"
+SSH_KEY="xxxxxxxxxx"
+
+GATEWAY=x.x.x.x
+
+VIP=x.x.x.x
+HOST_A_IP=x.x.x.x
+HOST_A=your-machine-name-a
+HOST_B=your-machine-name-b
+HOST_B_IP=y.y.y.y
+PGPASSWD="xxxxxx"
+PGREPLICAPASSWD="xxxxxxxxxx"
+
+# 05-check-vms.sh
+# 07-deploy-k3s-ha-cluster.sh
+VM_A_MASTER=ha-master
+VM_A_MASTER_IP=x.x.x.x
+VM_A_WORKER01=ha-worker1
+VM_A_WORKER01_IP=x.x.x.x
+VM_A_WORKER02=ha-worker2
+VM_A_WORKER02_IP=x.x.x.x
+VM_B_MASTER=hb-master
+VM_B_MASTER_IP=x.x.x.x
+VM_B_WORKER01=hb-worker1
+VM_B_WORKER01_IP=x.x.x.x
+VM_B_WORKER02=hb-worker2
+VM_B_WORKER02_IP=x.x.x.x
+
+# option
+# 08-add-k3s-cert-alpine.sh
+#EXTERNAL_IP="x.x.x.x"

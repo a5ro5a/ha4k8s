@@ -1,0 +1,40 @@
+#!/bin/bash
+CONTAINER_NAME="postgres-$(hostname)"
+
+echo "=== PostgreSQL役割確認 ==="
+echo "ホスト名: $(hostname)"
+echo "コンテナ名: $CONTAINER_NAME"
+
+# コンテナ状態
+if docker ps --format "{{.Names}}" | grep -q "$CONTAINER_NAME"; then
+    echo "コンテナ状態: 稼働中"
+    
+    # PostgreSQL役割確認
+    ROLE=$(docker exec "$CONTAINER_NAME" psql -U k3s -d k3s -t -c "SELECT pg_is_in_recovery();" 2>/dev/null | tr -d '[:space:]')
+    if [ "$ROLE" = "f" ]; then
+        echo "役割: ✅ プライマリ"
+    elif [ "$ROLE" = "t" ]; then
+        echo "役割: 📭 スタンバイ"
+        
+        # スタンバイ情報
+        docker exec "$CONTAINER_NAME" psql -U k3s -d k3s -c "
+        SELECT 
+            conninfo as primary_connection,
+            pg_wal_lsn_diff(pg_last_wal_receive_lsn(), pg_last_wal_replay_lsn()) as replication_lag
+        FROM pg_stat_wal_receiver;" 2>/dev/null || true
+    else
+        echo "役割: ❓ 不明 ($ROLE)"
+    fi
+else
+    echo "コンテナ状態: 停止中"
+fi
+# VIP状態
+echo ""
+echo "=== VIP状態 ==="
+if ip addr show br3 | grep -q "${VIP}"; then
+    echo "VIP: ✅ このホストにあります"
+    echo "期待される役割: プライマリ"
+else
+    echo "VIP: 📭 別ホストにあります"
+    echo "期待される役割: スタンバイ"
+fi

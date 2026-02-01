@@ -1,0 +1,14 @@
+services:
+  # HAProxy (ロードバランサー)
+  # https://hub.docker.com/_/haproxy
+  haproxy:
+    image: haproxy:${HAPROXY_VERSION}
+    container_name: postgres-haproxy
+    restart: no
+    #ports:
+    #  - "6432:5432"  # 外部からは5432に見える
+    volumes:
+      - ./config/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    network_mode: host
+    #depends_on:
+    #  - postgres-primary

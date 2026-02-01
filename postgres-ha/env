@@ -1,0 +1,7 @@
+VIP="x.x.x.x"
+MY_IP="x.x.x.x"
+OPPOSING_IP="y.y.y.y"
+PGPASSWD="xxxxxxxxxxx"
+PGREPLICAPASSWD="xxxxxxxxxxx"
+HAPROXY_VERSION="3.3.1-alpine3.23"
+PGSQL_VERSION="18.1-alpine3.23"

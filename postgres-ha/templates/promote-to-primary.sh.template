@@ -1,0 +1,64 @@
+#!/bin/bash
+set -e
+
+DATA_DIR="/var/lib/postgresql/data"
+STANDBY_CONTAINER="postgres-$(hostname)"
+
+echo "=== プライマリ昇格開始 ==="
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# 1. 現在の状態確認
+log "Checking current PostgreSQL state..."
+if docker exec "$STANDBY_CONTAINER" psql -U k3s -c "SELECT pg_is_in_recovery();" | grep -q "t"; then
+    log "PostgreSQL is in standby mode"
+else
+    log "PostgreSQL is already in primary mode"
+    exit 0
+fi
+
+# 2. スタンバイモードを解除（コンテナを停止せずに）
+log "Promoting standby to primary..."
+docker exec "$STANDBY_CONTAINER" rm -f "$DATA_DIR/standby.signal"
+docker exec "$STANDBY_CONTAINER" rm -f "$DATA_DIR/recovery.conf"
+
+# 3. pg_ctl promoteで昇格
+log "Running pg_ctl promote..."
+if docker exec "$STANDBY_CONTAINER" pg_ctl -D "$DATA_DIR" promote; then
+    log "✓ Successfully promoted to primary"
+else
+    log "✗ Promotion failed, trying restart method..."
+    
+    # 代替方法: コンテナを再起動してプライマリモードで起動
+    docker-compose -p postgres-standby -f /opt/postgres-ha/docker-compose-postgres-standby.yml stop
+    docker-compose -p postgres-standby -f /opt/postgres-ha/docker-compose-postgres-standby.yml up -d
+    
+    # 確認
+    sleep 3
+    if docker exec "$STANDBY_CONTAINER" psql -U k3s -c "SELECT pg_is_in_recovery();" | grep -q "f"; then
+        log "✓ Successfully restarted as primary"
+    else
+        log "✗ Failed to promote"
+        exit 1
+    fi
+fi
+
+# 4. レプリケーション設定を無効化
+log "Disabling replication configuration..."
+docker exec "$STANDBY_CONTAINER" bash -c "
+  sed -i '/primary_conninfo/d' $DATA_DIR/postgresql.conf 2>/dev/null || true
+  sed -i '/hot_standby/d' $DATA_DIR/postgresql.conf 2>/dev/null || true
+"
+# 5. 新しいスタンバイ用のレプリケーションスロット作成
+log "Creating replication slots for new standbys..."
+docker exec "$STANDBY_CONTAINER" psql -U k3s -c "
+SELECT pg_create_physical_replication_slot('standby_a_slot', true)
+WHERE NOT EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'standby_a_slot');
+
+SELECT pg_create_physical_replication_slot('standby_b_slot', true)
+WHERE NOT EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'standby_b_slot');
+"
+
+log "=== Primary promotion completed ==="

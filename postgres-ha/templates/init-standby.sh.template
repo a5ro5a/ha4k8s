@@ -1,0 +1,157 @@
+#!/bin/bash
+set -e
+
+echo "=== PostgreSQL Standby Initialization ==="
+
+# 設定（環境変数対応）
+PRIMARY_HOST="${OPPOSING_IP}"
+REPLICATOR_USER="replicator"
+REPLICATOR_PASSWORD="${PGREPLICAPASSWD}"
+STANDBY_NAME="${STANDBY_NAME:-$(hostname)}"
+DATA_DIR="/var/lib/postgresql/data"
+INITIALIZED_MARKER="$DATA_DIR/.standby_initialized"
+
+echo "Primary Host: $PRIMARY_HOST"
+echo "Standby Name: $STANDBY_NAME"
+echo "Replicator User: $REPLICATOR_USER"
+
+# 関数: ログ出力
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# 関数: プライマリ接続チェック
+check_primary_connection() {
+    log "Checking connection to primary server ($PRIMARY_HOST)..."
+    
+    for i in {1..30}; do
+        if PGPASSWORD="$REPLICATOR_PASSWORD" pg_isready -h "$PRIMARY_HOST" -U "$REPLICATOR_USER" -p 5432 2>/dev/null; then
+            log "✓ Primary server is accepting connections"
+            return 0
+        fi
+        if [ $i -eq 1 ]; then
+            log "Waiting for primary server..."
+        fi
+        sleep 2
+    done
+    
+    log "✗ Could not connect to primary server after 60 seconds"
+    return 1
+}
+
+# 関数: ベースバックアップ取得
+take_base_backup() {
+    log "Data directory is empty, taking base backup..."
+    
+    # ベースバックアップ取得（-Rオプションでrecovery.conf自動生成）
+    if ! PGPASSWORD="$REPLICATOR_PASSWORD" pg_basebackup \
+        -h "$PRIMARY_HOST" \
+        -U "$REPLICATOR_USER" \
+        -D "$DATA_DIR" \
+        -Fp \
+        -Xs \
+        -P \
+        -R \
+        --slot=standby_a_slot; then
+        log "✗ Failed to take base backup from primary"
+        return 1
+    fi
+    
+    # PostgreSQL 12+ 用にstandby.signalも作成
+    touch "$DATA_DIR/standby.signal"
+    
+    # 初期化完了マーカー
+    touch "$INITIALIZED_MARKER"
+    
+    log "✓ Base backup completed successfully"
+    return 0
+}
+
+# 関数: 既存データディレクトリのスタンバイ設定
+configure_existing_standby() {
+    log "Using existing data directory"
+    
+    # スタンバイモードが有効か確認
+    if [ ! -f "$DATA_DIR/standby.signal" ] ; then
+        log "Configuring as standby..."
+        # PostgreSQL 12+ 用にstandby.signalも作成
+        touch "$DATA_DIR/standby.signal"
+        log "✓ Configured as standby"
+    fi
+}
+
+# 関数: 権限設定
+set_permissions() {
+    log "Setting proper permissions..."
+    
+    # PostgreSQLユーザーで所有権を設定
+    chown -R postgres:postgres "$DATA_DIR" 2>/dev/null || true
+    chmod -R 750 "$DATA_DIR" 2>/dev/null || true
+    
+    # 設定ファイルの権限
+    chmod 600 "$DATA_DIR"/postgresql.conf 2>/dev/null || true
+    chmod 600 "$DATA_DIR"/pg_hba.conf 2>/dev/null || true
+    
+    log "✓ Permissions set"
+}
+
+# 関数: 最終チェック
+final_checks() {
+    log "Performing final checks..."
+    
+    # PostgreSQLバージョンの確認
+    if [ -f "$DATA_DIR/PG_VERSION" ]; then
+        PG_VERSION=$(cat "$DATA_DIR/PG_VERSION")
+        log "✓ PostgreSQL version: $PG_VERSION"
+    fi
+    
+    # スタンバイ設定の確認
+    if [ -f "$DATA_DIR/standby.signal" ]; then
+        log "✓ Standby signal file present"
+    fi
+    
+    
+    # データベースの存在確認
+    if [ -f "$DATA_DIR/base" ] && [ -d "$DATA_DIR/base/1" ]; then
+        log "✓ Database files detected"
+    fi
+}
+
+# メイン実行
+main() {
+    log "Starting standby initialization..."
+    
+    # 1. プライマリ接続チェック
+    if ! check_primary_connection; then
+        log "⚠ Continuing without primary connection (might be initial setup)"
+    fi
+    
+    # 2. データディレクトリの状態に応じて処理
+    if [ ! -f "$DATA_DIR/PG_VERSION" ]; then
+        # データディレクトリが空の場合
+        if check_primary_connection; then
+            take_base_backup || {
+                log "✗ Initialization failed"
+                exit 1
+            }
+        else
+            log "⚠ Cannot initialize: primary not available and data directory empty"
+            log "⚠ Will start with empty data directory (not recommended)"
+        fi
+    else
+        # 既存のデータディレクトリの場合
+        configure_existing_standby
+    fi
+    
+    # 3. 権限設定（可能な場合）
+    set_permissions
+    
+    # 4. 最終チェック
+    final_checks
+    
+    log "=== Standby initialization completed ==="
+    log "Standby is ready to start"
+}
+
+# スクリプト実行
+main

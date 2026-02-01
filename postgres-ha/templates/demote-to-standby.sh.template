@@ -1,0 +1,94 @@
+#!/bin/bash
+set -e
+
+# 新しいプライマリのIP(対向ホスト)
+NEW_PRIMARY_HOST=${OPPOSING_IP}
+OLD_PRIMARY_CONTAINER="postgres-$(hostname)"
+
+DATA_DIR="/var/lib/postgresql/data"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# 1. PostgreSQLを停止（コンテナは停止しない）
+log "Stopping PostgreSQL process..."
+docker exec "$OLD_PRIMARY_CONTAINER" pg_ctl -D "$DATA_DIR" -m fast stop 2>/dev/null || true
+
+# 2. データディレクトリをクリア
+log "PostgreSQLを停止..."
+docker exec "$OLD_PRIMARY_CONTAINER" pg_ctl -D "$DATA_DIR" -m fast stop 2>/dev/null || \
+log "停止済みまたは停止失敗（続行）"
+
+# 3. データディレクトリをクリア
+log "データディレクトリをクリア..."
+docker exec "$OLD_PRIMARY_CONTAINER" bash -c "
+    echo 'ディレクトリの内容を表示:'
+    ls -la '$DATA_DIR/' 2>/dev/null | head -5 || echo 'ディレクトリは空です'
+    
+    echo 'データを削除...'
+    rm -rf '$DATA_DIR'/*
+    
+    echo '削除後の確認:'
+    ls -la '$DATA_DIR/' 2>/dev/null | head -5 || echo 'ディレクトリは空です'
+"
+
+# 4. スタンバイ設定を確認
+log "Configuring as standby..."
+docker exec "$OLD_PRIMARY_CONTAINER" bash -c "
+    # standby.signalがなければ作成
+    if [ ! -f '$DATA_DIR/standby.signal' ]; then
+        touch '$DATA_DIR/standby.signal'
+        echo 'standby.signalを作成しました'
+    fi
+    
+    # primary_conninfoが正しく設定されているか確認
+    if [ ! -f '$DATA_DIR/primary_conninfo' ] && [ ! -f '$DATA_DIR/recovery.conf' ]; then
+        echo 'primary_conninfo = \"host=$NEW_PRIMARY_HOST port=5432 user=replicator password=ReplicatorPass123!\"' > '$DATA_DIR/primary_conninfo'
+        echo 'primary_conninfoを作成しました'
+    fi
+    
+    # recovery.confの確認
+    if [ -f '$DATA_DIR/recovery.conf' ]; then
+        echo 'recovery.confの内容:'
+        cat '$DATA_DIR/recovery.conf'
+    fi
+"
+
+# 5. PostgreSQLをスタンバイモードで起動
+log "PostgreSQLをスタンバイモードで起動..."
+if ! docker exec "$OLD_PRIMARY_CONTAINER" pg_ctl -D "$DATA_DIR" start 2>/dev/null; then
+    log "⚠ 起動失敗、コンテナを再起動"
+    docker restart "$OLD_PRIMARY_CONTAINER"
+    sleep 5
+fi
+
+# 6. 確認
+sleep 3
+log "Verifying standby status..."
+if docker exec "$OLD_PRIMARY_CONTAINER" psql -U k3s -d k3s -t -c "SELECT pg_is_in_recovery();" 2>/dev/null | grep -q "t"; then
+    log "✅ スタンバイに降格成功"
+    
+    # レプリケーション状態を表示
+    log "レプリケーション状態:"
+    docker exec "$OLD_PRIMARY_CONTAINER" psql -U k3s -d k3s -c "
+    SELECT 
+        status,
+        receive_start_lsn,
+        received_lsn,
+        last_msg_send_time,
+        last_msg_receipt_time,
+        latest_end_lsn,
+        slot_name
+    FROM pg_stat_wal_receiver;
+    " 2>/dev/null || log "レプリケーション情報取得中..."
+else
+    log "❌ スタンバイ降格失敗"
+    
+    # ログを確認
+    log "エラーログ:"
+    docker logs "$OLD_PRIMARY_CONTAINER" --tail 20
+    exit 1
+fi
+
+log "=== Standby demotion completed ==="
