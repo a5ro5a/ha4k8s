@@ -66,6 +66,13 @@ host-a (Debian 11, 16GB)                host-b (Debian 11, 16GB)
     ├── 06-setup-postgres-ha.sh
     ├── 07-deploy-k3s-ha-cluster.sh
     ├── 08-add-k3s-cert-alpine.sh
+    ├── 09-longhorn.md
+    ├── 10-prometheus-grafana.md
+    ├── img
+    │   ├── add-longhorn-to-grafana-dashboard.png
+    │   ├── add-longhorn-to-grafana-dashboard_02.png
+    │   ├── add-longhorn-to-grafana-dashboard_03.png
+    │   └── longhorn-ui.png
     ├── env
     └── manage-configs.sh
 ```
@@ -78,3 +85,4 @@ host-a (Debian 11, 16GB)                host-b (Debian 11, 16GB)
 - postgres-ha は/opt/へ配備してください。
   - /opt/postgres-ha/envを環境に合わせて編集
   - 06-setup-postgres-ha.sh で構築
+  - 09,10は自動化していないので.md通りに実施
