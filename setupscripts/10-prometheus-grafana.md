@@ -148,7 +148,6 @@ kubectl -n monitoring get pod -o wide
 > prometheus-stack-prometheus-node-exporter-8qcgq          1/1     Running   0          117s   172.31.1.22    hb-worker1   <none>           <none>
 > 
 > prometheus-stack-prometheus-node-exporter-v2n46          1/1     Running   0          117s   172.31.1.12    ha-worker1   <none>           <none>
-```
 ha-worker1,hb-worker2のみに作られていることを確認
 
 ### 5. 永続ボリュームの確認
@@ -168,8 +167,11 @@ kubectl -n monitoring get pv
 kubectl -n monitoring get pvc
 ```
 > NAME                                                                                                             STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+> 
 > alertmanager-prometheus-stack-kube-prom-alertmanager-db-alertmanager-prometheus-stack-kube-prom-alertmanager-0   Bound    pvc-27d087e7-293f-47fb-9b15-28d66516933b   1Gi        RWO            longhorn       <unset>                 18m
+> 
 > prometheus-prometheus-stack-kube-prom-prometheus-db-prometheus-prometheus-stack-kube-prom-prometheus-0           Bound    pvc-932e78b1-dadf-484d-944e-108e88617910   10Gi       RWO            longhorn       <unset>                 18m
+> 
 > prometheus-stack-grafana                                                                                         Bound    pvc-645e3582-81b3-4bd5-8b2a-e0f47bf3caca   2Gi        RWO            longhorn       <unset>                 19m
 
 ```bash
