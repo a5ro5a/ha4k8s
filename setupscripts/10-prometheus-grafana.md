@@ -1,4 +1,4 @@
-#10 prometheus / grafana
+# 10 prometheus / grafana
 
 ## アプリケーションと永続ストレージ構成
 
