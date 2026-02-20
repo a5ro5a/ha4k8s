@@ -136,25 +136,34 @@ kubectl -n monitoring get pod -o wide
 ```
 > NAME                                                     READY   STATUS    RESTARTS   AGE    IP             NODE         NOMINATED NODE   READINESS GATES
 > alertmanager-prometheus-stack-kube-prom-alertmanager-0   2/2     Running   0          104s   10.42.1.52     ha-worker1   <none>           <none>
+> 
 > prometheus-prometheus-stack-kube-prom-prometheus-0       1/2     Running   0          104s   10.42.1.53     ha-worker1   <none>           <none>
+> 
 > prometheus-stack-grafana-57f9bbbc4-4qmss                 3/3     Running   0          117s   10.42.16.128   hb-worker1   <none>           <none>
+> 
 > prometheus-stack-kube-prom-operator-5b48df5679-glzc2     1/1     Running   0          117s   10.42.16.127   hb-worker1   <none>           <none>
+> 
 > prometheus-stack-kube-state-metrics-668495c8c6-dwhb5     1/1     Running   0          117s   10.42.1.51     ha-worker1   <none>           <none>
+> 
 > prometheus-stack-prometheus-node-exporter-8qcgq          1/1     Running   0          117s   172.31.1.22    hb-worker1   <none>           <none>
+> 
 > prometheus-stack-prometheus-node-exporter-v2n46          1/1     Running   0          117s   172.31.1.12    ha-worker1   <none>           <none>
 ```
 ha-worker1,hb-worker2のみに作られていることを確認
 
 ### 5. 永続ボリュームの確認
 Longhornが期待通りにボリュームをプロビジョニングしているか確認
+
 ```bash
 kubectl -n monitoring get pv
 ```
 > NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                                                                                                                       STORAGECLASS   VOLUMEATTRIBUTESCLASS   REASON   AGE
+> 
 > pvc-27d087e7-293f-47fb-9b15-28d66516933b   1Gi        RWO            Delete           Bound    monitoring/alertmanager-prometheus-stack-kube-prom-alertmanager-db-alertmanager-prometheus-stack-kube-prom-alertmanager-0   longhorn       <unset>                          10m
+> 
 > pvc-645e3582-81b3-4bd5-8b2a-e0f47bf3caca   2Gi        RWO            Delete           Bound    monitoring/prometheus-stack-grafana                                                                                         longhorn       <unset>                          7m4s
+> 
 > pvc-932e78b1-dadf-484d-944e-108e88617910   10Gi       RWO            Delete           Bound    monitoring/prometheus-prometheus-stack-kube-prom-prometheus-db-prometheus-prometheus-stack-kube-prom-prometheus-0           longhorn       <unset>                          10m
-```
 ```bash
 kubectl -n monitoring get pvc
 ```
@@ -162,14 +171,13 @@ kubectl -n monitoring get pvc
 > alertmanager-prometheus-stack-kube-prom-alertmanager-db-alertmanager-prometheus-stack-kube-prom-alertmanager-0   Bound    pvc-27d087e7-293f-47fb-9b15-28d66516933b   1Gi        RWO            longhorn       <unset>                 18m
 > prometheus-prometheus-stack-kube-prom-prometheus-db-prometheus-prometheus-stack-kube-prom-prometheus-0           Bound    pvc-932e78b1-dadf-484d-944e-108e88617910   10Gi       RWO            longhorn       <unset>                 18m
 > prometheus-stack-grafana                                                                                         Bound    pvc-645e3582-81b3-4bd5-8b2a-e0f47bf3caca   2Gi        RWO            longhorn       <unset>                 19m
-```
 
 ```bash
 kubectl -n monitoring describe pvc prometheus-stack-grafana|tail -n2
 ```
 >   Normal   Provisioning           2m1s (x11 over 15m)   driver.longhorn.io_csi-provisioner-688964c44b-lkvlx_64166c33-709b-4d98-be40-120b0f3df436  External provisioner is provisioning volume for claim "monitoring/prometheus-stack-grafana"
+> 
 >   Normal   ProvisioningSucceeded  119s                  driver.longhorn.io_csi-provisioner-688964c44b-lkvlx_64166c33-709b-4d98-be40-120b0f3df436  Successfully provisioned volume pvc-645e3582-81b3-4bd5-8b2a-e0f47bf3caca
-```
 
 ## 修正する場合
 ```bash
