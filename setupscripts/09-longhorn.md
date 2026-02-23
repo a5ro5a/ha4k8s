@@ -198,7 +198,7 @@ for crd in backuptargets.longhorn.io engineimages.longhorn.io nodes.longhorn.io;
     kubectl patch crd $crd -p '{"metadata":{"finalizers":[]}}' --type=merge
 done
 
-for crd in $(kubectl get crd | grep longhorn | awk '{print $1}'); do     echo "Deleting $crd";     timeout 3 kubectl delete crd $crd; done
+for crd in $(kubectl get crd | grep longhorn | awk '{print $1}'); do     echo "Deleting $crd";     timeout 3 kubectl delete crd $crd  --force --grace-period=0; done
 
 # pod以外削除
 for tgt in $( kubectl get all -A|grep -i longhorn|grep -v pod\/ | awk '{print $2}') ; do timeout 1 kubectl delete -n longhorn-system $tgt ; done

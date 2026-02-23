@@ -150,6 +150,34 @@ kubectl -n monitoring get pod -o wide
 > prometheus-stack-prometheus-node-exporter-v2n46          1/1     Running   0          117s   172.31.1.12    ha-worker1   <none>           <none>
 ha-worker1,hb-worker2のみに作られていることを確認
 
+#### 何故かworker2に作られてしまう場合
+nodeSelectorが効いていない
+```bash
+# Alertmanager StatefulSetのnodeSelector設定を詳細確認
+kubectl -n monitoring get statefulset alertmanager-prometheus-stack-kube-prom-alertmanager -o yaml | grep -A10 -B10 nodeSelector
+
+# Prometheus StatefulSetも同様に
+kubectl -n monitoring get statefulset prometheus-prometheus-stack-kube-prom-prometheus -o yaml | grep -A10 -B10 nodeSelector
+```
+worker2で作られないようにする
+```bash
+# worker2にテイントを追加（Podを締め出す）
+# テイントは「キー=値:効果」の組み合わせで識別されます
+kubectl taint node ha-worker2 dedicated=monitoring:NoSchedule
+kubectl taint node hb-worker2 dedicated=monitoring:NoSchedule
+kubectl taint node ha-worker2 only-worker1=true:NoSchedule
+kubectl taint node hb-worker2 only-worker1=true:NoSchedule
+
+# Alertmanager Podを削除
+kubectl -n monitoring delete pod alertmanager-prometheus-stack-kube-prom-alertmanager-0
+
+# Prometheus Podも削除
+kubectl -n monitoring delete pod prometheus-prometheus-stack-kube-prom-prometheus-0
+
+# どこにスケジュールされるか監視
+kubectl -n monitoring get pods -o wide -w
+```
+
 ### 5. 永続ボリュームの確認
 Longhornが期待通りにボリュームをプロビジョニングしているか確認
 
@@ -195,6 +223,7 @@ helm uninstall prometheus-stack -n monitoring
 kubectl delete namespace monitoring
 
 kubectl get crd | grep monitoring.coreos.com | awk '{print $1}' | xargs kubectl delete crd
+kubectl delete service/prometheus-stack-kube-prom-kubelet -n kube-system
 
 確認
 kubectl get all -A|egrep "monitor|prometheus|grafana" 
@@ -214,20 +243,21 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: longhorn
-  namespace: longhorn-system
+  namespace: monitoring
   labels:
     app: longhorn
     release: prometheus-stack  # Prometheusが選択するラベル
 spec:
-  selector:
-    matchLabels:
-      app: longhorn-manager  # Longhorn ManagerのPodについているラベル
   namespaceSelector:
     matchNames:
     - longhorn-system
+  selector:
+    matchLabels:
+      app: longhorn-manager  # Longhorn ManagerのPodについているラベル
   endpoints:
   - port: manager  # Longhorn Managerが公開しているポート名
     interval: 30s
+    path: /metrics
 EOF
 ```
 
